@@ -78,6 +78,10 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         formula_representation: FormulaRepresentation,
 
+        /// Run countermodel generation with the specified model builder
+        #[arg(long, value_enum, default_value_t)]
+        countermodel: ModelBuilder,
+
         /// Bypass the tightness checks during verification of external equivalence
         #[arg(long, action)]
         bypass_tightness: bool,
@@ -97,6 +101,10 @@ pub enum Command {
         /// Omit display of system runtimes
         #[arg(long, action)]
         no_timing: bool,
+
+        /// Remove standard preamble in favor of a one-sorted, integer-only background theory
+        #[arg(long, action)]
+        int_only: bool,
 
         /// The time limit in seconds to prove each problem passed to a prover
         #[arg(long, short, default_value_t = 60)]
@@ -122,6 +130,13 @@ pub enum Command {
         #[arg(verbatim_doc_comment)]
         files: Vec<PathBuf>,
     },
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub(crate) enum ModelBuilder {
+    #[default]
+    None,
+    Cvc5,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]

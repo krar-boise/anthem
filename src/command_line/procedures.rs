@@ -3,7 +3,7 @@ use {
         analyzing::{regularity::Regularity as _, tightness::Tightness},
         command_line::{
             arguments::{
-                Arguments, Command, Equivalence, Output, ParseAs, Property,
+                self, Arguments, Command, Equivalence, Output, ParseAs, Property,
                 SimplificationPortfolio, SimplificationStrategy, Translation,
             },
             files::Files,
@@ -16,6 +16,7 @@ use {
             formula_representation::{mu::Mu as _, natural::Natural as _, tau_star::TauStar as _},
         },
         verifying::{
+            problem::Interpretation,
             prover::{Prover, Report, Status, Success, vampire::Vampire},
             task::{
                 Task, external_equivalence::ExternalEquivalenceTask,
@@ -27,7 +28,7 @@ use {
     clap::Parser as _,
     either::Either,
     indexmap::IndexSet,
-    std::time::Instant,
+    std::{path::PathBuf, time::Instant},
 };
 
 pub fn main() -> Result<()> {
@@ -176,11 +177,13 @@ pub fn main() -> Result<()> {
             decomposition,
             direction,
             formula_representation,
+            countermodel,
             bypass_tightness,
             no_simplify,
             no_eq_break,
             no_proof_search,
             no_timing,
+            int_only,
             time_limit,
             prover_instances,
             prover_cores,
@@ -192,7 +195,9 @@ pub fn main() -> Result<()> {
             let files =
                 Files::sort(files).context("unable to sort the given files by their function")?;
 
-            let problems = match equivalence {
+            let with_countermodel = matches!(countermodel, arguments::ModelBuilder::Cvc5);
+
+            let task_problems = match equivalence {
                 Equivalence::Strong => StrongEquivalenceTask {
                     left: asp::Program::from_file(
                         files
@@ -207,6 +212,7 @@ pub fn main() -> Result<()> {
                     decomposition,
                     formula_representation,
                     direction,
+                    int_only,
                     simplify: !no_simplify,
                     break_equivalences: !no_eq_break,
                 }
@@ -239,6 +245,7 @@ pub fn main() -> Result<()> {
                     formula_representation,
                     direction,
                     bypass_tightness,
+                    int_only,
                     simplify: !no_simplify,
                     break_equivalences: !no_eq_break,
                 }
@@ -246,11 +253,30 @@ pub fn main() -> Result<()> {
                 .report_warnings(),
             };
 
+            let problems = task_problems.proof_problems;
+
             if let Some(out_dir) = out_dir {
+                let mut preamble_path = out_dir.clone();
+                preamble_path.push("standard_preamble.p");
+                // Write preamble to separate file
+                Interpretation::Standard.to_file(&preamble_path)?;
+
                 for problem in &problems {
                     let mut path = out_dir.clone();
                     path.push(format!("{}.p", problem.name));
+                    let mut problem = problem.clone();
+                    problem.preamble = Some(PathBuf::from("standard_preamble.p"));
                     problem.to_file(path)?;
+                }
+
+                if with_countermodel {
+                    let countermodel_problems = task_problems.countermodel_problems.clone();
+                    for problem in countermodel_problems {
+                        let mut path = out_dir.clone();
+                        path.push(format!("{}.smt2", problem.name));
+                        let problem = problem.clone();
+                        problem.to_file(path)?;
+                    }
                 }
             }
 

@@ -1158,6 +1158,10 @@ pub struct Theory {
 impl_node!(Theory, Format, TheoryParser);
 
 impl Theory {
+    pub fn new() -> Self {
+        Theory { formulas: vec![] }
+    }
+
     pub fn predicates(&self) -> IndexSet<Predicate> {
         let mut preds = IndexSet::new();
         for formula in self {

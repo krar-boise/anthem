@@ -101,6 +101,11 @@ impl Problem {
         }
     }
 
+    pub fn set_interpretation(mut self, interpretation: Interpretation) -> Self {
+        self.interpretation = interpretation;
+        self
+    }
+
     pub fn add_annotated_formulas(
         mut self,
         annotated_formulas: impl IntoIterator<Item = AnnotatedFormula>,

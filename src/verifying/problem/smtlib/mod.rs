@@ -2,7 +2,7 @@ use {
     super::Interpretation,
     crate::{
         formatting::fol::sigma_0::smtlib,
-        syntax_tree::fol::sigma_0::{self as fol, Formula, FunctionConstant, Predicate, Theory},
+        syntax_tree::fol::sigma_0::{Formula, FunctionConstant, Predicate, Theory},
     },
     anyhow::{Context as _, Result},
     indexmap::IndexSet,
