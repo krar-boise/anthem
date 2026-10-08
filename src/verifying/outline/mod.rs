@@ -18,8 +18,8 @@ use {
 // An inductive lemma F has conjectures [Base, Step] and axioms [F]
 #[derive(Clone, Debug, PartialEq)]
 pub struct GeneralLemma {
-    pub conjectures: Vec<problem::AnnotatedFormula>,
-    pub consequences: Vec<problem::AnnotatedFormula>,
+    pub conjectures: Vec<problem::tptp::AnnotatedFormula>,
+    pub consequences: Vec<problem::tptp::AnnotatedFormula>,
 }
 
 impl TryFrom<fol::AnnotatedFormula> for GeneralLemma {
@@ -33,9 +33,11 @@ impl TryFrom<fol::AnnotatedFormula> for GeneralLemma {
                 conjectures: vec![
                     annotated_formula
                         .clone()
-                        .into_problem_formula(problem::Role::Conjecture),
+                        .into_problem_formula(problem::tptp::Role::Conjecture),
                 ],
-                consequences: vec![annotated_formula.into_problem_formula(problem::Role::Axiom)],
+                consequences: vec![
+                    annotated_formula.into_problem_formula(problem::tptp::Role::Axiom),
+                ],
             }),
             fol::Role::InductiveLemma => {
                 let induction_formulas = annotated_formula.formula.clone().inductive_lemma()?;
@@ -55,11 +57,11 @@ impl TryFrom<fol::AnnotatedFormula> for GeneralLemma {
                 };
                 Ok(GeneralLemma {
                     conjectures: vec![
-                        base_annotated.into_problem_formula(problem::Role::Conjecture),
-                        step_annotated.into_problem_formula(problem::Role::Conjecture),
+                        base_annotated.into_problem_formula(problem::tptp::Role::Conjecture),
+                        step_annotated.into_problem_formula(problem::tptp::Role::Conjecture),
                     ],
                     consequences: vec![
-                        annotated_formula.into_problem_formula(problem::Role::Axiom),
+                        annotated_formula.into_problem_formula(problem::tptp::Role::Axiom),
                     ],
                 })
             }

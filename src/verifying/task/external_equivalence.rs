@@ -16,7 +16,7 @@ use {
         },
         verifying::{
             outline::{GeneralLemma, ProofOutline, ProofOutlineError, ProofOutlineWarning},
-            problem::{self, Problem},
+            problem::{self, tptp::Problem},
             task::Task,
         },
     },
@@ -665,13 +665,13 @@ impl Task for ValidatedExternalEquivalenceTask {
     fn decompose(self) -> Result<Vec<Problem>, Self::Warning, Self::Error> {
         use crate::{
             syntax_tree::fol::sigma_0::{Direction::*, Role::*},
-            verifying::problem::Role::*,
+            verifying::problem::tptp::Role::*,
         };
 
         let mut stable_premises: Vec<_> = self
             .user_guide_assumptions
             .into_iter()
-            .map(|a| a.into_problem_formula(problem::Role::Axiom))
+            .map(|a| a.into_problem_formula(problem::tptp::Role::Axiom))
             .collect();
 
         let mut forward_premises = Vec::new();
@@ -751,11 +751,11 @@ impl Task for ValidatedExternalEquivalenceTask {
 }
 
 struct AssembledExternalEquivalenceTask {
-    pub stable_premises: Vec<problem::AnnotatedFormula>,
-    pub forward_premises: Vec<problem::AnnotatedFormula>,
-    pub forward_conclusions: Vec<problem::AnnotatedFormula>,
-    pub backward_premises: Vec<problem::AnnotatedFormula>,
-    pub backward_conclusions: Vec<problem::AnnotatedFormula>,
+    pub stable_premises: Vec<problem::tptp::AnnotatedFormula>,
+    pub forward_premises: Vec<problem::tptp::AnnotatedFormula>,
+    pub forward_conclusions: Vec<problem::tptp::AnnotatedFormula>,
+    pub backward_premises: Vec<problem::tptp::AnnotatedFormula>,
+    pub backward_conclusions: Vec<problem::tptp::AnnotatedFormula>,
     pub proof_outline: ProofOutline,
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
@@ -778,7 +778,7 @@ impl Task for AssembledExternalEquivalenceTask {
                 self.proof_outline
                     .forward_definitions
                     .into_iter()
-                    .map(|f| f.into_problem_formula(problem::Role::Axiom)),
+                    .map(|f| f.into_problem_formula(problem::tptp::Role::Axiom)),
             );
 
             for (i, lemma) in self.proof_outline.forward_lemmas.iter().enumerate() {
@@ -821,7 +821,7 @@ impl Task for AssembledExternalEquivalenceTask {
                 self.proof_outline
                     .backward_definitions
                     .into_iter()
-                    .map(|f| f.into_problem_formula(problem::Role::Axiom)),
+                    .map(|f| f.into_problem_formula(problem::tptp::Role::Axiom)),
             );
 
             for (i, lemma) in self.proof_outline.backward_lemmas.iter().enumerate() {

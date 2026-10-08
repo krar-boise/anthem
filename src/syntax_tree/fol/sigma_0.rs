@@ -1057,6 +1057,17 @@ impl Formula {
             x => x,
         })
     }
+
+    pub(crate) fn quantifier_free(&self) -> bool {
+        match self {
+            Formula::AtomicFormula(_) => true,
+            Formula::UnaryFormula { formula, .. } => formula.quantifier_free(),
+            Formula::BinaryFormula { lhs, rhs, .. } => {
+                lhs.quantifier_free() && rhs.quantifier_free()
+            }
+            Formula::QuantifiedFormula { .. } => false,
+        }
+    }
 }
 
 impl IntegerConversion for Formula {
@@ -1213,8 +1224,11 @@ pub struct AnnotatedFormula {
 impl_node!(AnnotatedFormula, Format, AnnotatedFormulaParser);
 
 impl AnnotatedFormula {
-    pub fn into_problem_formula(self, role: problem::Role) -> problem::AnnotatedFormula {
-        problem::AnnotatedFormula {
+    pub fn into_problem_formula(
+        self,
+        role: problem::tptp::Role,
+    ) -> problem::tptp::AnnotatedFormula {
+        problem::tptp::AnnotatedFormula {
             // TODO: Revisit default naming scheme!
             name: self.name,
             role,

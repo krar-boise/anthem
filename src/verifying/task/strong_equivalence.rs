@@ -13,7 +13,7 @@ use {
             formula_representation::{mu::Mu as _, tau_star::TauStar as _},
         },
         verifying::{
-            problem::{AnnotatedFormula, Problem, Role},
+            problem::tptp::{AnnotatedFormula, Problem, Role},
             task::Task,
         },
     },

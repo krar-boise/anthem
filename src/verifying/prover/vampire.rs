@@ -1,6 +1,6 @@
 use {
     crate::verifying::{
-        problem::Problem,
+        problem::tptp::Problem,
         prover::{Prover, Report, Status, StatusExtractionError},
     },
     std::{

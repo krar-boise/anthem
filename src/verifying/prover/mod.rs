@@ -1,5 +1,5 @@
 use {
-    crate::verifying::problem::Problem,
+    crate::verifying::problem::tptp::Problem,
     lazy_static::lazy_static,
     regex::Regex,
     std::{
