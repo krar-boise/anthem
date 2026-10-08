@@ -475,10 +475,10 @@ fn tau_b_first_order_literal(l: asp::Literal, taken_vars: IndexSet<fol::Variable
     let valtz = fol::Formula::conjoin(valtz_vec);
 
     // Compute p(Z1, Z2, ..., Zk)
-    let p_zk = fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
-        predicate_symbol: atom.predicate_symbol,
-        terms: var_terms,
-    }));
+    let p_zk = fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom::new(
+        atom.predicate_symbol,
+        var_terms,
+    )));
 
     // Compute tau^b(B)
     match l.sign {
@@ -539,13 +539,14 @@ fn tau_b_propositional_literal(l: asp::Literal) -> fol::Formula {
     match l.sign {
         asp::Sign::NoSign => fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
             predicate_symbol: atom.predicate_symbol,
-
+            argument_sorts: vec![],
             terms: vec![],
         })),
         asp::Sign::Negation => fol::Formula::UnaryFormula {
             connective: fol::UnaryConnective::Negation,
             formula: fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
                 predicate_symbol: atom.predicate_symbol,
+                argument_sorts: vec![],
                 terms: vec![],
             }))
             .into(),
@@ -556,6 +557,7 @@ fn tau_b_propositional_literal(l: asp::Literal) -> fol::Formula {
                 connective: fol::UnaryConnective::Negation,
                 formula: fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
                     predicate_symbol: atom.predicate_symbol,
+                    argument_sorts: vec![],
                     terms: vec![],
                 }))
                 .into(),
@@ -673,10 +675,10 @@ fn tau_star_fo_head_rule(r: &asp::Rule, globals: &[String]) -> fol::Formula {
         new_terms.push(fol_term);
     }
     let valtz = valtz(head_terms.to_vec(), fo_vars); // val_t(V)
-    let new_head = fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
-        predicate_symbol: fol_head_predicate.symbol,
-        terms: new_terms,
-    })); // p(V)
+    let new_head = fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom::new(
+        fol_head_predicate.symbol,
+        new_terms,
+    ))); // p(V)
     let core_lhs = fol::Formula::BinaryFormula {
         connective: fol::BinaryConnective::Conjunction,
         lhs: valtz.into(),
@@ -738,6 +740,7 @@ fn tau_star_prop_head_rule(r: &asp::Rule) -> fol::Formula {
     }
     let new_head = fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(fol::Atom {
         predicate_symbol: fol_head_predicate.symbol,
+        argument_sorts: vec![],
         terms: vec![],
     }));
     let core_lhs = tau_body(r.body.clone());

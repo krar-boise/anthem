@@ -418,7 +418,8 @@ mod tests {
                         rhs: IntegerTerm::Numeral(3).into(),
                     }),
                     GeneralTerm::IntegerTerm(IntegerTerm::Numeral(5)),
-                ]
+                ],
+                argument_sorts: vec![Sort::General],
             })
             .to_string(),
             "prime(f__integer__($sum(N1_i, 3)), f__integer__(5))"
@@ -593,6 +594,7 @@ mod tests {
         assert_eq!(
             Format(&Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                 predicate_symbol: "p".into(),
+                argument_sorts: vec![],
                 terms: vec![]
             })))
             .to_string(),
@@ -605,11 +607,13 @@ mod tests {
                     connective: BinaryConnective::Implication,
                     lhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                         predicate_symbol: "p".into(),
+                        argument_sorts: vec![],
                         terms: vec![]
                     }))
                     .into(),
                     rhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                         predicate_symbol: "q".into(),
+                        argument_sorts: vec![],
                         terms: vec![]
                     }))
                     .into()
@@ -617,6 +621,7 @@ mod tests {
                 .into(),
                 rhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                     predicate_symbol: "r".into(),
+                    argument_sorts: vec![],
                     terms: vec![]
                 }))
                 .into(),
@@ -643,11 +648,13 @@ mod tests {
                     connective: BinaryConnective::Conjunction,
                     lhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                         predicate_symbol: "p".into(),
+                        argument_sorts: vec![],
                         terms: vec![],
                     }))
                     .into(),
                     rhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                         predicate_symbol: "q".into(),
+                        argument_sorts: vec![],
                         terms: vec![],
                     }))
                     .into(),
@@ -682,6 +689,7 @@ mod tests {
                         connective: BinaryConnective::Conjunction,
                         lhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                             predicate_symbol: "p".into(),
+                            argument_sorts: vec![Sort::General],
                             terms: vec![GeneralTerm::IntegerTerm(IntegerTerm::Variable(
                                 "X".to_string()
                             ))],
@@ -689,6 +697,7 @@ mod tests {
                         .into(),
                         rhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                             predicate_symbol: "q".into(),
+                            argument_sorts: vec![Sort::General],
                             terms: vec![GeneralTerm::Variable("Y1".to_string())],
                         }))
                         .into(),
@@ -696,6 +705,7 @@ mod tests {
                     .into(),
                     rhs: Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                         predicate_symbol: "t".into(),
+                        argument_sorts: vec![Sort::General],
                         terms: vec![GeneralTerm::SymbolicTerm(SymbolicTerm::Variable(
                             "X_i".into()
                         ))],

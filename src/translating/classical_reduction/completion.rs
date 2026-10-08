@@ -110,10 +110,7 @@ fn atomic_formula_from(predicate: &fol::Predicate) -> fol::AtomicFormula {
         .into_iter()
         .map(fol::GeneralTerm::Variable)
         .collect();
-    fol::AtomicFormula::Atom(fol::Atom {
-        predicate_symbol: predicate.symbol.clone(),
-        terms,
-    })
+    fol::AtomicFormula::Atom(fol::Atom::new(predicate.symbol.clone(), terms))
 }
 
 fn heads(definitions: &Definitions) -> IndexMap<fol::Predicate, Vec<&fol::AtomicFormula>> {

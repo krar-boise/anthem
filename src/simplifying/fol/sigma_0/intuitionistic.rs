@@ -614,12 +614,14 @@ mod tests {
             },
             formula: Box::new(Formula::AtomicFormula(AtomicFormula::Atom(Atom {
                 predicate_symbol: "a".into(),
+                argument_sorts: vec![],
                 terms: vec![],
             }))),
         };
 
         let target = Formula::AtomicFormula(AtomicFormula::Atom(Atom {
             predicate_symbol: "a".into(),
+            argument_sorts: vec![],
             terms: vec![],
         }));
 

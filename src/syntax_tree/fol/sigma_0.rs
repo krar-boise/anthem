@@ -12,7 +12,7 @@ use {
             UserGuideParser, VariableParser,
         },
         simplifying::fol::sigma_0::intuitionistic::join_nested_quantifiers,
-        syntax_tree::{Node, impl_node},
+        syntax_tree::{Node, fol::IntegerConversion, impl_node},
         verifying::problem,
     },
     clap::ValueEnum,
@@ -279,12 +279,12 @@ impl_node!(Predicate, Format, PredicateParser);
 
 impl Predicate {
     pub fn to_formula(self) -> Formula {
-        Formula::AtomicFormula(AtomicFormula::Atom(Atom {
-            predicate_symbol: self.symbol,
-            terms: (1..=self.arity)
+        Formula::AtomicFormula(AtomicFormula::Atom(Atom::new(
+            self.symbol,
+            (1..=self.arity)
                 .map(|i| GeneralTerm::Variable(format!("X{i}")))
                 .collect(),
-        }))
+        )))
     }
 }
 
@@ -301,9 +301,19 @@ impl From<crate::syntax_tree::asp::mini_gringo::Predicate> for Predicate {
 pub struct Atom {
     pub predicate_symbol: String,
     pub terms: Vec<GeneralTerm>,
+    pub argument_sorts: Vec<Sort>,
 }
 
 impl Atom {
+    pub fn new(predicate_symbol: String, terms: Vec<GeneralTerm>) -> Self {
+        let arity = terms.len();
+        Atom {
+            predicate_symbol,
+            terms,
+            argument_sorts: vec![Sort::General; arity],
+        }
+    }
+
     pub fn predicate(&self) -> Predicate {
         Predicate {
             symbol: self.predicate_symbol.clone(),
@@ -319,6 +329,7 @@ impl Atom {
                 .into_iter()
                 .map(|t| t.rename_conflicting_symbols(possible_conflicts))
                 .collect(),
+            argument_sorts: self.argument_sorts,
         }
     }
 
@@ -330,6 +341,7 @@ impl Atom {
                 .into_iter()
                 .map(|t| t.replace_placeholders(mapping))
                 .collect(),
+            argument_sorts: self.argument_sorts,
         }
     }
 }
@@ -348,6 +360,7 @@ impl Atom {
         Atom {
             predicate_symbol,
             terms,
+            argument_sorts: self.argument_sorts,
         }
     }
 }
@@ -597,6 +610,12 @@ impl AtomicFormula {
             }
             x => x,
         }
+    }
+}
+
+impl IntegerConversion for AtomicFormula {
+    fn convert_to_integer_domain(self) -> anyhow::Result<AtomicFormula> {
+        todo!()
     }
 }
 
@@ -960,6 +979,12 @@ impl Formula {
     }
 }
 
+impl IntegerConversion for Formula {
+    fn convert_to_integer_domain(self) -> anyhow::Result<Formula> {
+        todo!()
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash, IntoIterator)]
 pub struct Theory {
     #[into_iterator(owned, ref, ref_mut)]
@@ -989,6 +1014,17 @@ impl FromIterator<Formula> for Theory {
         Theory {
             formulas: iter.into_iter().collect(),
         }
+    }
+}
+
+impl IntegerConversion for Theory {
+    fn convert_to_integer_domain(self) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        self.into_iter()
+            .map(|f| f.convert_to_integer_domain())
+            .collect()
     }
 }
 

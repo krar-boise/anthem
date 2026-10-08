@@ -209,14 +209,12 @@ fn natural_comparison(
 }
 
 fn natural_b_atom(l: &asp::Atom, int_vars: &IndexSet<std::string::String>) -> Option<fol::Atom> {
-    Some(fol::Atom {
-        predicate_symbol: l.predicate_symbol.to_string(),
-        terms: l
-            .terms
-            .iter()
-            .map(|t| p2f(t, int_vars))
-            .collect::<Option<Vec<fol::GeneralTerm>>>()?,
-    })
+    let terms = l
+        .terms
+        .iter()
+        .map(|t| p2f(t, int_vars))
+        .collect::<Option<Vec<fol::GeneralTerm>>>()?;
+    Some(fol::Atom::new(l.predicate_symbol.to_string(), terms))
 }
 
 fn natural_b_literal(
@@ -292,10 +290,7 @@ fn natural_head_atom(
         };
     }
     Some(fol::Formula::AtomicFormula(fol::AtomicFormula::Atom(
-        fol::Atom {
-            predicate_symbol: a.predicate_symbol.clone(),
-            terms,
-        },
+        fol::Atom::new(a.predicate_symbol.clone(), terms),
     )))
 }
 

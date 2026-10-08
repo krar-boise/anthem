@@ -75,6 +75,7 @@ impl RenamePredicates for fol::Atom {
             Some(name_extension) => fol::Atom {
                 predicate_symbol: format!("{}_{}", self.predicate_symbol, name_extension),
                 terms: self.terms,
+                argument_sorts: self.argument_sorts,
             },
             None => self,
         }
