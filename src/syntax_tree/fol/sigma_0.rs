@@ -15,6 +15,7 @@ use {
         syntax_tree::{Node, fol::IntegerConversion, impl_node},
         verifying::problem,
     },
+    anyhow::anyhow,
     clap::ValueEnum,
     derive_more::derive::IntoIterator,
     indexmap::{IndexMap, IndexSet},
@@ -269,6 +270,24 @@ impl From<Variable> for GeneralTerm {
     }
 }
 
+impl IntegerConversion for GeneralTerm {
+    fn convert_to_integer_domain(self) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        match &self {
+            GeneralTerm::Infimum
+            | GeneralTerm::Supremum
+            | GeneralTerm::FunctionConstant(_)
+            | GeneralTerm::SymbolicTerm(_) => Err(anyhow!("cannot convert to integer-type term")),
+            GeneralTerm::Variable(v) => {
+                Ok(GeneralTerm::IntegerTerm(IntegerTerm::Variable(v.clone())))
+            }
+            GeneralTerm::IntegerTerm(_) => Ok(self),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Predicate {
     pub symbol: String,
@@ -303,6 +322,8 @@ pub struct Atom {
     pub terms: Vec<GeneralTerm>,
     pub argument_sorts: Vec<Sort>,
 }
+
+impl_node!(Atom, Format, AtomParser);
 
 impl Atom {
     pub fn new(predicate_symbol: String, terms: Vec<GeneralTerm>) -> Self {
@@ -344,11 +365,7 @@ impl Atom {
             argument_sorts: self.argument_sorts,
         }
     }
-}
 
-impl_node!(Atom, Format, AtomParser);
-
-impl Atom {
     pub fn substitute(self, var: Variable, term: GeneralTerm) -> Self {
         let predicate_symbol = self.predicate_symbol;
 
@@ -362,6 +379,26 @@ impl Atom {
             terms,
             argument_sorts: self.argument_sorts,
         }
+    }
+}
+
+impl IntegerConversion for Atom {
+    fn convert_to_integer_domain(self) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        let arity = self.terms.len();
+        let mut terms = Vec::new();
+        for term in self.terms {
+            let iterm = term.convert_to_integer_domain()?;
+            terms.push(iterm);
+        }
+
+        Ok(Atom {
+            predicate_symbol: self.predicate_symbol,
+            terms,
+            argument_sorts: vec![Sort::Integer; arity],
+        })
     }
 }
 
@@ -416,6 +453,19 @@ impl Guard {
             relation: self.relation,
             term: self.term.replace_placeholders(mapping),
         }
+    }
+}
+
+impl IntegerConversion for Guard {
+    fn convert_to_integer_domain(self) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        let term = self.term.convert_to_integer_domain()?;
+        Ok(Guard {
+            relation: self.relation,
+            term,
+        })
     }
 }
 
@@ -499,6 +549,22 @@ impl Comparison {
                 .map(|g| g.replace_placeholders(mapping))
                 .collect(),
         }
+    }
+}
+
+impl IntegerConversion for Comparison {
+    fn convert_to_integer_domain(self) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        let term = self.term.convert_to_integer_domain()?;
+        let mut guards = Vec::new();
+        for g in self.guards {
+            let guard = g.convert_to_integer_domain()?;
+            guards.push(guard);
+        }
+
+        Ok(Comparison { term, guards })
     }
 }
 
@@ -614,8 +680,22 @@ impl AtomicFormula {
 }
 
 impl IntegerConversion for AtomicFormula {
-    fn convert_to_integer_domain(self) -> anyhow::Result<AtomicFormula> {
-        todo!()
+    fn convert_to_integer_domain(self) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        match self {
+            AtomicFormula::Truth => Ok(AtomicFormula::Truth),
+            AtomicFormula::Falsity => Ok(AtomicFormula::Falsity),
+            AtomicFormula::Atom(atom) => {
+                let atom = atom.convert_to_integer_domain()?;
+                Ok(AtomicFormula::Atom(atom))
+            }
+            AtomicFormula::Comparison(comparison) => {
+                let comparison = comparison.convert_to_integer_domain()?;
+                Ok(AtomicFormula::Comparison(comparison))
+            }
+        }
     }
 }
 
@@ -981,7 +1061,80 @@ impl Formula {
 
 impl IntegerConversion for Formula {
     fn convert_to_integer_domain(self) -> anyhow::Result<Formula> {
-        todo!()
+        let taken_vars = self.variables();
+        for var in taken_vars.iter() {
+            if !matches!(var.sort, Sort::General | Sort::Integer) {
+                return Err(anyhow!("formula contains symbolic variables"));
+            }
+        }
+
+        match self {
+            Formula::QuantifiedFormula {
+                quantification:
+                    Quantification {
+                        quantifier,
+                        variables,
+                    },
+                formula,
+            } => {
+                let mut formula = *formula;
+                let fresh_int_vars = taken_vars.choose_fresh_variables("N", variables.len());
+                for (index, var) in variables.into_iter().enumerate() {
+                    let term = GeneralTerm::IntegerTerm(IntegerTerm::Variable(
+                        fresh_int_vars[index].clone(),
+                    ));
+                    formula = formula.substitute(var, term);
+                }
+
+                let variables = fresh_int_vars
+                    .into_iter()
+                    .map(|v| Variable {
+                        name: v,
+                        sort: Sort::Integer,
+                    })
+                    .collect();
+
+                formula = formula.convert_to_integer_domain()?;
+
+                Ok(Formula::QuantifiedFormula {
+                    quantification: Quantification {
+                        quantifier,
+                        variables,
+                    },
+                    formula: formula.into(),
+                })
+            }
+
+            Formula::AtomicFormula(a) => {
+                let a = a.convert_to_integer_domain()?;
+                Ok(Formula::AtomicFormula(a))
+            }
+
+            Formula::UnaryFormula {
+                connective: UnaryConnective::Negation,
+                formula,
+            } => {
+                let formula = (*formula).convert_to_integer_domain()?;
+                Ok(Formula::UnaryFormula {
+                    connective: UnaryConnective::Negation,
+                    formula: formula.into(),
+                })
+            }
+
+            Formula::BinaryFormula {
+                connective,
+                lhs,
+                rhs,
+            } => {
+                let lhs = (*lhs).convert_to_integer_domain()?;
+                let rhs = (*rhs).convert_to_integer_domain()?;
+                Ok(Formula::BinaryFormula {
+                    connective,
+                    lhs: lhs.into(),
+                    rhs: rhs.into(),
+                })
+            }
+        }
     }
 }
 
@@ -1097,6 +1250,32 @@ impl AnnotatedFormula {
     pub fn replace_placeholders(mut self, mapping: &IndexMap<String, FunctionConstant>) -> Self {
         self.formula = self.formula.replace_placeholders(mapping);
         self
+    }
+}
+
+impl IntegerConversion for AnnotatedFormula {
+    fn convert_to_integer_domain(self) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        let formula = self.formula.convert_to_integer_domain()?;
+        Ok(AnnotatedFormula {
+            role: self.role,
+            direction: self.direction,
+            name: self.name,
+            formula,
+        })
+    }
+}
+
+impl IntegerConversion for Vec<AnnotatedFormula> {
+    fn convert_to_integer_domain(self) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        self.into_iter()
+            .map(|f| f.convert_to_integer_domain())
+            .collect()
     }
 }
 
