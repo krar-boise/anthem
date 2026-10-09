@@ -199,17 +199,34 @@ pub fn main() -> Result<()> {
             let with_countermodel = matches!(countermodel, arguments::ModelBuilder::Cvc5);
 
             let task_problems = match equivalence {
-                Equivalence::Strong => StrongEquivalenceTask {
-                    left: asp::Program::from_file(
+
+                Equivalence::Strong => {
+                    let left = asp::Program::from_file(
                         files
                             .left()
                             .ok_or(anyhow!("no left program was provided"))?,
-                    )?,
-                    right: asp::Program::from_file(
+                    )?;
+                    let right = asp::Program::from_file(
                         files
                             .right()
                             .ok_or(anyhow!("no right program was provided"))?,
-                    )?,
+                    )?;
+
+                    match (countermodel, formula_representation) {
+                        (arguments::ModelBuilder::Cvc5, arguments::FormulaRepresentation::TauStar) => {
+                            return Err(anyhow!("tau-star formula representation is not yet supported for countermodel building"))
+                        },
+                        (arguments::ModelBuilder::None, ..)
+                        | (arguments::ModelBuilder::Cvc5, arguments::FormulaRepresentation::Mu) => {
+                            if !(left.is_regular() && right.is_regular()) {
+                                return Err(anyhow!("only regular programs are currently supported for countermodel building"))
+                            }
+                        },
+                    }
+
+                    StrongEquivalenceTask {
+                    left,
+                    right,
                     decomposition,
                     formula_representation,
                     direction,
@@ -218,7 +235,8 @@ pub fn main() -> Result<()> {
                     break_equivalences: !no_eq_break,
                 }
                 .decompose()?
-                .report_warnings(),
+                .report_warnings()
+            },
 
                 Equivalence::External => ExternalEquivalenceTask {
                     specification: match files

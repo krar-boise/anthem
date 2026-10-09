@@ -186,8 +186,8 @@ pub enum Translation {
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum FormulaRepresentation {
-    Mu,
     #[default]
+    Mu,
     TauStar,
 }
 
