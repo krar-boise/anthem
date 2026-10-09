@@ -173,10 +173,20 @@ impl Task for StrongEquivalenceTask {
             transition_axioms = transition_axioms.convert_to_integer_domain()?;
         }
 
+        // CM Building is always done in the Integer domain (for now)
+        let mut cm_left = left.clone();
+        let mut cm_right = right.clone();
+        let mut cm_transition = transition_axioms.clone();
+        if !self.int_only {
+            cm_left = cm_left.convert_to_integer_domain()?;
+            cm_right = cm_right.convert_to_integer_domain()?;
+            cm_transition = cm_transition.convert_to_integer_domain()?;
+        }
+
         let countermodel_task = StrongCounterModelTask {
-            left: left.clone(),
-            right: right.clone(),
-            transition_axioms: transition_axioms.clone(),
+            left: cm_left,
+            right: cm_right,
+            transition_axioms: cm_transition,
             definite,
         }
         .decompose()?;

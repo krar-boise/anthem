@@ -1177,6 +1177,12 @@ impl Theory {
     }
 }
 
+impl Default for Theory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FromIterator<Formula> for Theory {
     fn from_iter<T: IntoIterator<Item = Formula>>(iter: T) -> Self {
         Theory {

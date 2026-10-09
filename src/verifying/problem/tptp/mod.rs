@@ -261,18 +261,18 @@ impl Problem {
         write!(file, "{self}").with_context(|| format!("could not write file `{}`", path.display()))
     }
 
-    pub fn convert_to_integer_domain(self) -> Result<Self> {
-        let mut formulas = vec![];
-        for f in self.formulas {
-            formulas.push(f.convert_to_integer_domain()?);
-        }
-        Ok(Problem {
-            name: self.name,
-            interpretation: Interpretation::Integer,
-            formulas,
-            preamble: None,
-        })
-    }
+    // pub fn convert_to_integer_domain(self) -> Result<Self> {
+    //     let mut formulas = vec![];
+    //     for f in self.formulas {
+    //         formulas.push(f.convert_to_integer_domain()?);
+    //     }
+    //     Ok(Problem {
+    //         name: self.name,
+    //         interpretation: Interpretation::Integer,
+    //         formulas,
+    //         preamble: None,
+    //     })
+    // }
 }
 
 impl fmt::Display for Problem {
