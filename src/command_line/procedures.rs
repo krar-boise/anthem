@@ -437,7 +437,7 @@ pub fn main() -> Result<()> {
                         Ok((message, model_result)) => match model_result {
                             Some(model) => {
                                 countermodel_found = true;
-                                println!("{model}");
+                                println!("{message}\n{model}");
                             }
                             None => println!("{message}"),
                         },

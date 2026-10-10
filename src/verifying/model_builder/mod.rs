@@ -145,9 +145,6 @@ pub enum ModelBuildingBackend {
 }
 
 impl ModelBuildingBackend {
-    // TODO: this should return a dynamic boxed iterator analogous to prove_all
-    // If we have multiple problems, we don't want previous messages/models
-    // being overwritten by the latest build() call
     pub(crate) fn execute_problems(
         &self,
         problems: Vec<smtlib::Problem>,
@@ -160,35 +157,33 @@ impl ModelBuildingBackend {
             ModelBuildingBackend::Cvc5(cvc5) => {
                 for problem in problems {
                     // Stop early if early termination is enabled and the ATP thread has finished
-                    if use_early_stop {
-                        if early_stop.load(Ordering::Relaxed) {
-                            message = String::from(
-                                "Countermodel building terminated early by theorem proving thread",
-                            );
-                            break;
-                        }
+                    if use_early_stop && early_stop.load(Ordering::Relaxed) {
+                        message.push_str(
+                            "\nCountermodel building terminated early by theorem proving thread",
+                        );
+                        break;
                     }
                     match cvc5.build(problem) {
                         Ok(report) => match report.model() {
                             Ok(result) => match result {
                                 Some(m) => {
                                     let status = report.status().unwrap();
-                                    message = status.to_string();
+                                    message.push_str(&status.to_string());
                                     model = Some(m);
                                     if use_early_stop && matches!(status, Status::Success(_)) {
                                         early_stop.store(true, Ordering::Relaxed); // CMB finished early
                                     }
                                 }
                                 None => {
-                                    message = "missing model".to_string();
+                                    message.push_str("missing model");
                                 }
                             },
                             Err(err) => {
-                                message = err.to_string();
+                                message.push_str(&err.to_string());
                             }
                         },
                         Err(err) => {
-                            message = err.to_string();
+                            message.push_str(&err.to_string());
                         }
                     }
                 }

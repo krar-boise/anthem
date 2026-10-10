@@ -377,10 +377,10 @@ impl CounterModelTask for StrongCounterModelTask {
                 // lhs and not rhs
                 let p1 = Formula::BinaryFormula {
                     connective: fol::BinaryConnective::Conjunction,
-                    lhs: lhs.clone().into(),
+                    lhs: lhs.clone(),
                     rhs: Formula::UnaryFormula {
                         connective: fol::UnaryConnective::Negation,
-                        formula: rhs.clone().into(),
+                        formula: rhs.clone(),
                     }
                     .into(),
                 };
@@ -390,10 +390,10 @@ impl CounterModelTask for StrongCounterModelTask {
                     connective: fol::BinaryConnective::Conjunction,
                     lhs: Formula::UnaryFormula {
                         connective: fol::UnaryConnective::Negation,
-                        formula: lhs.into(),
+                        formula: lhs,
                     }
                     .into(),
-                    rhs: rhs.into(),
+                    rhs,
                 };
 
                 problems.push(
