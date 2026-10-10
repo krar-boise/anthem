@@ -5,6 +5,10 @@ use {
     std::{
         fmt::{Debug, Display},
         str::FromStr,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
     },
     thiserror::Error,
 };
@@ -141,21 +145,39 @@ pub enum ModelBuildingBackend {
 }
 
 impl ModelBuildingBackend {
+    // TODO: this should return a dynamic boxed iterator analogous to prove_all
+    // If we have multiple problems, we don't want previous messages/models
+    // being overwritten by the latest build() call
     pub(crate) fn execute_problems(
         &self,
         problems: Vec<smtlib::Problem>,
+        early_stop: Arc<AtomicBool>,
+        use_early_stop: bool,
     ) -> (String, Option<Model>) {
         let mut message = String::new();
         let mut model = None;
         match self {
             ModelBuildingBackend::Cvc5(cvc5) => {
                 for problem in problems {
+                    // Stop early if early termination is enabled and the ATP thread has finished
+                    if use_early_stop {
+                        if early_stop.load(Ordering::Relaxed) {
+                            message = String::from(
+                                "Countermodel building terminated early by theorem proving thread",
+                            );
+                            break;
+                        }
+                    }
                     match cvc5.build(problem) {
                         Ok(report) => match report.model() {
                             Ok(result) => match result {
                                 Some(m) => {
-                                    message = report.status().unwrap().to_string();
+                                    let status = report.status().unwrap();
+                                    message = status.to_string();
                                     model = Some(m);
+                                    if use_early_stop && matches!(status, Status::Success(_)) {
+                                        early_stop.store(true, Ordering::Relaxed); // CMB finished early
+                                    }
                                 }
                                 None => {
                                     message = "missing model".to_string();

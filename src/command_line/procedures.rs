@@ -29,7 +29,15 @@ use {
     clap::Parser as _,
     either::Either,
     indexmap::IndexSet,
-    std::{path::PathBuf, thread, time::Instant},
+    std::{
+        path::PathBuf,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        thread,
+        time::Instant,
+    },
 };
 
 pub fn main() -> Result<()> {
@@ -191,6 +199,7 @@ pub fn main() -> Result<()> {
             save_problems: out_dir,
             files,
             cmb_strategy,
+            terminate_early,
         } => {
             let start_time = Instant::now();
 
@@ -330,6 +339,17 @@ pub fn main() -> Result<()> {
 
                 // Run proof search and CM building in parallel
                 let mut handle = None;
+
+                // early_stop and early_stop_copy both point to an AtomicBool, B.
+                // When/if either thread (the CMB or ATP thread) sets B to true,
+                // the thread reading B stops
+                let early_stop = Arc::new(AtomicBool::new(false));
+                let early_stop_copy = Arc::clone(&early_stop);
+                let mut use_early_stop = false;
+                if terminate_early {
+                    use_early_stop = true;
+                }
+
                 if with_countermodel {
                     let backend = match countermodel {
                         arguments::ModelBuilder::Cvc5 => {
@@ -341,13 +361,17 @@ pub fn main() -> Result<()> {
                     // TODO: an "unsat" status indicates the ATP problem is valid?
                     // Returns Some(model) if a countermodel is found
                     let thread_handle = thread::spawn(move || {
-                        backend.execute_problems(task_problems.countermodel_problems)
+                        backend.execute_problems(
+                            task_problems.countermodel_problems,
+                            early_stop_copy,
+                            use_early_stop,
+                        )
                     });
                     handle = Some(thread_handle);
                 }
 
                 let mut prover_success = true;
-                for result in prover.prove_all(problems) {
+                for result in prover.prove_all(problems, use_early_stop) {
                     match result {
                         Ok(report) => match report.status() {
                             Ok(status) => {
@@ -383,10 +407,30 @@ pub fn main() -> Result<()> {
                             prover_success = false;
                         }
                     }
-                    println!();
+
+                    // Stop early if early termination is enabled and CMB thread has finished
+                    if use_early_stop && early_stop.load(Ordering::Relaxed) {
+                        println!("Theorem proving terminated early by countermodel thread");
+                        println!();
+                        break;
+                    } else {
+                        println!();
+                    }
+
+                    // An ATP subproblem has failed, indicating failure of total ATP task
+                    if !prover_success && terminate_early {
+                        println!("Theorem proving terminated early due to failure of sub-problem");
+                        println!();
+                        break;
+                    }
                 }
 
-                // Wait for CM building to finish
+                // ATP thread has successfully found a proof, CMB can stop early
+                if prover_success {
+                    early_stop.store(true, Ordering::Relaxed);
+                }
+
+                // Join the CM building thread back to main (ATP) thread
                 let mut countermodel_found = false;
                 if with_countermodel {
                     match handle.take().unwrap().join() {

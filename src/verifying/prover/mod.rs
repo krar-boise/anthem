@@ -105,6 +105,7 @@ pub trait Prover: Debug + Clone + Send + 'static {
     fn prove_all(
         &self,
         problems: impl IntoIterator<Item = Problem> + 'static,
+        use_early_stop: bool,
     ) -> Box<dyn Iterator<Item = Result<Self::Report, Self::Error>>> {
         if self.instances() == 1 {
             let prover = self.clone();
@@ -114,6 +115,9 @@ pub trait Prover: Debug + Clone + Send + 'static {
                     .map(move |problem| prover.prove(problem)),
             )
         } else {
+            if use_early_stop {
+                panic!("Early termination is not yet implemented for n > 1!")
+            }
             let pool = ThreadPool::new(self.instances());
             let (tx, rx) = channel();
 

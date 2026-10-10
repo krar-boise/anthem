@@ -106,6 +106,12 @@ pub enum Command {
         #[arg(long, action)]
         no_timing: bool,
 
+        /// Stop proof search on first failed sub-problem,
+        /// stop countermodel search on first successful sub-problem,
+        /// stop verification early if a proof or countermodel is found early
+        #[arg(long, action)]
+        terminate_early: bool,
+
         /// Remove standard preamble in favor of a one-sorted, integer-only background theory
         #[arg(long, action)]
         int_only: bool,
