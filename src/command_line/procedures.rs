@@ -190,6 +190,7 @@ pub fn main() -> Result<()> {
             prover_cores,
             save_problems: out_dir,
             files,
+            cmb_strategy,
         } => {
             let start_time = Instant::now();
 
@@ -199,7 +200,6 @@ pub fn main() -> Result<()> {
             let with_countermodel = matches!(countermodel, arguments::ModelBuilder::Cvc5);
 
             let task_problems = match equivalence {
-
                 Equivalence::Strong => {
                     let left = asp::Program::from_file(
                         files
@@ -213,30 +213,38 @@ pub fn main() -> Result<()> {
                     )?;
 
                     match (countermodel, formula_representation) {
-                        (arguments::ModelBuilder::Cvc5, arguments::FormulaRepresentation::TauStar) => {
-                            return Err(anyhow!("tau-star formula representation is not yet supported for countermodel building"))
-                        },
+                        (
+                            arguments::ModelBuilder::Cvc5,
+                            arguments::FormulaRepresentation::TauStar,
+                        ) => {
+                            return Err(anyhow!(
+                                "tau-star formula representation is not yet supported for countermodel building"
+                            ));
+                        }
                         (arguments::ModelBuilder::None, ..)
                         | (arguments::ModelBuilder::Cvc5, arguments::FormulaRepresentation::Mu) => {
                             if !(left.is_regular() && right.is_regular()) {
-                                return Err(anyhow!("only regular programs are currently supported for countermodel building"))
+                                return Err(anyhow!(
+                                    "only regular programs are currently supported for countermodel building"
+                                ));
                             }
-                        },
+                        }
                     }
 
                     StrongEquivalenceTask {
-                    left,
-                    right,
-                    decomposition,
-                    formula_representation,
-                    direction,
-                    int_only,
-                    simplify: !no_simplify,
-                    break_equivalences: !no_eq_break,
+                        left,
+                        right,
+                        decomposition,
+                        formula_representation,
+                        direction,
+                        cmb_strategy,
+                        int_only,
+                        simplify: !no_simplify,
+                        break_equivalences: !no_eq_break,
+                    }
+                    .decompose()?
+                    .report_warnings()
                 }
-                .decompose()?
-                .report_warnings()
-            },
 
                 Equivalence::External => ExternalEquivalenceTask {
                     specification: match files

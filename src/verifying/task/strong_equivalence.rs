@@ -1,6 +1,6 @@
 use {
     crate::{
-        command_line::arguments::{Decomposition, FormulaRepresentation},
+        command_line::arguments::{CmbStrategy, Decomposition, FormulaRepresentation},
         convenience::{
             apply::Apply as _,
             compose::Compose as _,
@@ -73,6 +73,7 @@ pub struct StrongEquivalenceTask {
     pub decomposition: Decomposition,
     pub direction: fol::Direction,
     pub formula_representation: FormulaRepresentation,
+    pub cmb_strategy: CmbStrategy,
     pub simplify: bool,
     pub break_equivalences: bool,
     pub int_only: bool,
@@ -188,6 +189,7 @@ impl Task for StrongEquivalenceTask {
             right: cm_right,
             transition_axioms: cm_transition,
             definite,
+            strategy: self.cmb_strategy,
         }
         .decompose()?;
 
@@ -313,6 +315,7 @@ pub struct StrongCounterModelTask {
     pub right: fol::Theory,
     pub transition_axioms: fol::Theory,
     pub definite: bool,
+    pub strategy: CmbStrategy,
 }
 
 #[derive(Error, Debug)]
@@ -332,34 +335,108 @@ impl CounterModelTask for StrongCounterModelTask {
             false => self.transition_axioms,
         };
 
-        // not (lhs <=> rhs)
         let lhs = Box::new(Formula::conjoin(self.left.formulas));
         let rhs = Box::new(Formula::conjoin(self.right.formulas));
-        let consequent = Formula::UnaryFormula {
-            connective: fol::UnaryConnective::Negation,
-            formula: Formula::BinaryFormula {
-                connective: fol::BinaryConnective::Equivalence,
-                lhs,
-                rhs,
+
+        let problems = match self.strategy {
+            CmbStrategy::None => {
+                // not (lhs <=> rhs)
+                let consequent = Formula::UnaryFormula {
+                    connective: fol::UnaryConnective::Negation,
+                    formula: Formula::BinaryFormula {
+                        connective: fol::BinaryConnective::Equivalence,
+                        lhs,
+                        rhs,
+                    }
+                    .into(),
+                };
+
+                let problems = vec![
+                    smtlib::Problem::with_name("countermodel")
+                        .add_theory(transition_axioms, |i, formula| smtlib::AnnotatedFormula {
+                            name: format!("transition_axiom_{i}"),
+                            role: smtlib::Role::Assertion,
+                            formula,
+                        })
+                        .add_annotated_formulas(vec![consequent].into_iter().map(|formula| {
+                            smtlib::AnnotatedFormula {
+                                name: "consequent".to_string(),
+                                role: smtlib::Role::Assertion,
+                                formula,
+                            }
+                        }))
+                        .update_logic(),
+                ];
+
+                problems
             }
-            .into(),
+
+            CmbStrategy::ByCases => {
+                let mut problems = Vec::new();
+
+                // lhs and not rhs
+                let p1 = Formula::BinaryFormula {
+                    connective: fol::BinaryConnective::Conjunction,
+                    lhs: lhs.clone().into(),
+                    rhs: Formula::UnaryFormula {
+                        connective: fol::UnaryConnective::Negation,
+                        formula: rhs.clone().into(),
+                    }
+                    .into(),
+                };
+
+                // not lhs and rhs
+                let p2 = Formula::BinaryFormula {
+                    connective: fol::BinaryConnective::Conjunction,
+                    lhs: Formula::UnaryFormula {
+                        connective: fol::UnaryConnective::Negation,
+                        formula: lhs.into(),
+                    }
+                    .into(),
+                    rhs: rhs.into(),
+                };
+
+                problems.push(
+                    smtlib::Problem::with_name("countermodel-left")
+                        .add_theory(transition_axioms.clone(), |i, formula| {
+                            smtlib::AnnotatedFormula {
+                                name: format!("transition_axiom_{i}"),
+                                role: smtlib::Role::Assertion,
+                                formula,
+                            }
+                        })
+                        .add_annotated_formulas(vec![p1].into_iter().map(|formula| {
+                            smtlib::AnnotatedFormula {
+                                name: "p1".to_string(),
+                                role: smtlib::Role::Assertion,
+                                formula,
+                            }
+                        }))
+                        .update_logic(),
+                );
+                problems.push(
+                    smtlib::Problem::with_name("countermodel-right")
+                        .add_theory(transition_axioms, |i, formula| smtlib::AnnotatedFormula {
+                            name: format!("transition_axiom_{i}"),
+                            role: smtlib::Role::Assertion,
+                            formula,
+                        })
+                        .add_annotated_formulas(vec![p2].into_iter().map(|formula| {
+                            smtlib::AnnotatedFormula {
+                                name: "p2".to_string(),
+                                role: smtlib::Role::Assertion,
+                                formula,
+                            }
+                        }))
+                        .update_logic(),
+                );
+
+                problems
+            }
+
+            CmbStrategy::Bsr => todo!(),
         };
 
-        let problem = smtlib::Problem::with_name("countermodel")
-            .add_theory(transition_axioms, |i, formula| smtlib::AnnotatedFormula {
-                name: format!("transition_axiom_{i}"),
-                role: smtlib::Role::Assertion,
-                formula,
-            })
-            .add_annotated_formulas(vec![consequent].into_iter().map(|formula| {
-                smtlib::AnnotatedFormula {
-                    name: "consequent".to_string(),
-                    role: smtlib::Role::Assertion,
-                    formula,
-                }
-            }))
-            .update_logic();
-
-        Ok(WithWarnings::flawless(vec![problem]))
+        Ok(WithWarnings::flawless(problems))
     }
 }

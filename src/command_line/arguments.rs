@@ -82,6 +82,10 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t)]
         countermodel: ModelBuilder,
 
+        /// Apply the specified decomposition/transformation to the countermodel problem
+        #[arg(long, value_enum, default_value_t)]
+        cmb_strategy: CmbStrategy,
+
         /// Bypass the tightness checks during verification of external equivalence
         #[arg(long, action)]
         bypass_tightness: bool,
@@ -133,7 +137,15 @@ pub enum Command {
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-pub(crate) enum ModelBuilder {
+pub enum CmbStrategy {
+    #[default]
+    None,
+    ByCases,
+    Bsr,
+}
+
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum ModelBuilder {
     #[default]
     None,
     Cvc5,
