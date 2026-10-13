@@ -1,7 +1,7 @@
 use {
     crate::verifying::{
         model_builder::{
-            Assignment, Model, ModelBuilder, ModelExtractionError, Report, Status,
+            Assignment, Failure, Model, ModelBuilder, ModelExtractionError, Report, Status,
             StatusExtractionError, Success,
         },
         problem::smtlib::Problem,
@@ -10,7 +10,6 @@ use {
         fmt::{self, Display},
         io::Write as _,
         process::{Command, Output, Stdio},
-        //time::{Duration, Instant},
     },
     thiserror::Error,
 };
@@ -49,6 +48,19 @@ pub struct Cvc5Report {
     //pub elapsed_time: Duration,
 }
 
+fn assignments(output: &str) -> Vec<Assignment> {
+    let mut assignments = Vec::new();
+
+    let mut lines = output.lines();
+    lines.next(); // Discard sat/unsat message
+    lines.next(); // Discard the first '('
+    for line in lines {
+        assignments.push(Assignment::from_cvc_str(line));
+    }
+    assignments.pop(); // Discard the last ')'
+    assignments
+}
+
 impl Report for Cvc5Report {
     fn status(&self) -> Result<Status, StatusExtractionError> {
         self.output.stdout.parse()
@@ -59,24 +71,71 @@ impl Report for Cvc5Report {
             Ok(status) => match status {
                 Status::Success(success) => match success {
                     Success::Satisfiable => {
-                        let mut assignments = Vec::new();
-
-                        let output = &self.output.stdout;
-                        let mut lines = output.lines();
-                        lines.next(); // Discard sat/unsat message
-                        for line in lines {
-                            assignments.push(Assignment {
-                                raw: line.to_string(),
-                            });
-                        }
-
+                        let assignments = assignments(&self.output.stdout);
                         Ok(Some(Model { assignments }))
                     }
                 },
-                Status::Failure(_) => Ok(None),
+                Status::Failure(Failure::Unknown) => {
+                    let assignments = assignments(&self.output.stdout);
+                    Ok(Some(Model { assignments }))
+                }
+                Status::Failure(Failure::Unsatisfiable) => Ok(None),
             },
             Err(error) => Err(ModelExtractionError::FailedStatusExtraction(error)),
         }
+    }
+
+    fn evaluate(&self) -> (String, Status, Option<Model>) {
+        let final_status;
+        let mut message = String::new();
+        let mut model = None;
+        match self.status() {
+            Ok(status) => match status {
+                Status::Success(Success::Satisfiable) => {
+                    final_status = status;
+                    match self.model() {
+                        Ok(result) => match result {
+                            Some(m) => {
+                                message.push_str(&status.to_string());
+                                model = Some(m);
+                            }
+                            None => {
+                                message.push_str("missing model");
+                            }
+                        },
+
+                        Err(_) => todo!(),
+                    }
+                }
+
+                Status::Failure(Failure::Unknown) => {
+                    final_status = status;
+                    match self.model() {
+                        Ok(result) => match result {
+                            Some(candidate) => {
+                                // convert to defined-funs, then re-run sat check
+                                // let func = Assignment::from_cvc_str(raw);
+                                // problem.add_defined_function();
+                                message.push_str(&status.to_string());
+                                model = Some(candidate);
+                            }
+                            None => {
+                                message.push_str("missing candidate model");
+                            }
+                        },
+                        Err(_) => todo!(),
+                    }
+                }
+
+                Status::Failure(Failure::Unsatisfiable) => {
+                    final_status = status;
+                    message.push_str(&status.to_string());
+                }
+            },
+
+            Err(_) => todo!(),
+        }
+        (message, final_status, model)
     }
 }
 
@@ -121,7 +180,7 @@ impl ModelBuilder for Cvc5 {
 
         let time_limit = self.time_limit.to_string();
 
-        let arguments = Vec::from_iter(["--tlimit", &time_limit]);
+        let arguments = Vec::from_iter(["--dump-models", "--tlimit", &time_limit]);
 
         let mut child = Command::new("cvc5")
             .args(arguments)

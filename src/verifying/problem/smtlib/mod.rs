@@ -3,11 +3,21 @@ use {
     crate::{
         formatting::fol::sigma_0::smtlib,
         syntax_tree::fol::sigma_0::{Formula, FunctionConstant, Predicate, Theory},
+        verifying::model_builder::Assignment,
     },
     anyhow::{Context as _, Result},
     indexmap::IndexSet,
+    lazy_static::lazy_static,
+    regex::Regex,
     std::{fmt, fs::File, io::Write as _, path::Path},
 };
+
+lazy_static! {
+    static ref FN: Regex = Regex::new(
+        r"\(define-fun (?<symbol>[[:word:]]+) \((?<args>.*))\) (?<val>[Int|Bool]) (?<def>.*)\)"
+    )
+    .unwrap();
+}
 
 //
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -71,11 +81,27 @@ impl fmt::Display for AnnotatedFormula {
     }
 }
 
+impl Assignment {
+    pub fn from_cvc_str(raw: &str) -> Assignment {
+        let caps = FN.captures(&raw).unwrap();
+        let arg_string = caps["args"].to_string();
+        let arguments = arg_string.split(" ").map(|s| s.to_string()).collect();
+
+        Assignment {
+            symbol: caps["symbol"].to_string(),
+            arguments,
+            value_sort: caps["val"].to_string(),
+            definition: caps["def"].to_string(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Problem {
     pub name: String,
     pub logic: Logic,
     pub interpretation: Interpretation,
+    pub defined_fns: Vec<Assignment>,
     pub formulas: Vec<AnnotatedFormula>,
 }
 
@@ -85,6 +111,7 @@ impl Problem {
             name: name.into(),
             interpretation: Interpretation::Integer,
             formulas: vec![],
+            defined_fns: vec![],
             logic: Logic::Ufnia, // Default to most general logic
         }
     }
@@ -184,6 +211,13 @@ impl Problem {
             .with_context(|| format!("could not create file `{}`", path.display()))?;
         write!(file, "{self}").with_context(|| format!("could not write file `{}`", path.display()))
     }
+
+    pub fn add_defined_functions(mut self, assignments: Vec<Assignment>) -> Self {
+        for assignment in assignments {
+            self.defined_fns.push(assignment);
+        }
+        self
+    }
 }
 
 impl fmt::Display for Problem {
@@ -198,14 +232,30 @@ impl fmt::Display for Problem {
             Logic::Qfnia => writeln!(f, "(set-logic QF_NIA)")?,
         }
 
+        // Write defined functions (if any)
+        for function in self.defined_fns.iter() {
+            writeln!(f, "{function}")?;
+        }
+
+        let defined_fn_symbols: Vec<String> = self
+            .defined_fns
+            .iter()
+            .map(|f| f.symbol.clone())
+            //.filter_map(|f| f.symbol.clone())
+            .collect();
+
         // Declare predicates
         for predicate in self.predicates().iter() {
-            writeln!(f, "(declare-fun {} Bool)", smtlib::Format(predicate))?;
+            if !defined_fn_symbols.contains(&predicate.symbol) {
+                writeln!(f, "(declare-fun {} Bool)", smtlib::Format(predicate))?;
+            }
         }
 
         // Declare functions
         for function in self.function_constants().iter() {
-            writeln!(f, "(declare-fun {} () Int)", smtlib::Format(function))?;
+            if !defined_fn_symbols.contains(&function.name) {
+                writeln!(f, "(declare-fun {} () Int)", smtlib::Format(function))?;
+            }
         }
 
         // Write assertions
@@ -218,11 +268,11 @@ impl fmt::Display for Problem {
 
         // Check satisfiability and get model
         writeln!(f, "(check-sat)")?;
-        for p in self.predicates().iter() {
-            let symbol = &p.symbol;
-            let arity = p.arity;
-            writeln!(f, "(get-value ({symbol}_{arity}))")?;
-        }
+        // for p in self.predicates().iter() {
+        //     let symbol = &p.symbol;
+        //     let arity = p.arity;
+        //     writeln!(f, "(get-value ({symbol}_{arity}))")?;
+        // }
         // TODO: get-value for placeholders
 
         Ok(())

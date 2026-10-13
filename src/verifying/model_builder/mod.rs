@@ -40,6 +40,17 @@ impl Display for ModelExtractionError {
     }
 }
 
+// #[derive(Debug, Error)]
+// pub enum ReportEvaluationError {
+//     FailedReportEvaluation(#[from] ModelExtractionError),
+// }
+
+// impl Display for ReportEvaluationError {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         todo!()
+//     }
+// }
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Success {
     Satisfiable,
@@ -91,14 +102,21 @@ impl FromStr for Status {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Assignment {
-    pub raw: String,
+    pub symbol: String,
+    pub arguments: Vec<String>,
+    pub value_sort: String,
+    pub definition: String,
 }
 
 impl Display for Assignment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "{}", self.raw)
+        write!(f, "(define-fun {} (", self.symbol)?;
+        for arg in self.arguments.iter() {
+            write!(f, " ({arg})")?
+        }
+        write!(f, " ) {} ({}))\n", self.value_sort, self.definition)
     }
 }
 
@@ -122,6 +140,8 @@ pub trait Report: Display + Debug + Clone {
     fn status(&self) -> Result<Status, StatusExtractionError>;
 
     fn model(&self) -> Result<Option<Model>, ModelExtractionError>;
+
+    fn evaluate(&self) -> (String, Status, Option<Model>);
 }
 
 pub trait ModelBuilder: Debug + Clone + Send + 'static {
@@ -151,11 +171,15 @@ impl ModelBuildingBackend {
         early_stop: Arc<AtomicBool>,
         use_early_stop: bool,
     ) -> (String, Option<Model>) {
+        let mut status;
         let mut message = String::new();
         let mut model = None;
         match self {
             ModelBuildingBackend::Cvc5(cvc5) => {
                 for problem in problems {
+                    // Problem may have to be re-run after being extended with a candidate model
+                    let remodel_problem = problem.clone();
+
                     // Stop early if early termination is enabled and the ATP thread has finished
                     if use_early_stop && early_stop.load(Ordering::Relaxed) {
                         message.push_str(
@@ -163,25 +187,53 @@ impl ModelBuildingBackend {
                         );
                         break;
                     }
+
                     match cvc5.build(problem) {
-                        Ok(report) => match report.model() {
-                            Ok(result) => match result {
-                                Some(m) => {
-                                    let status = report.status().unwrap();
-                                    message.push_str(&status.to_string());
-                                    model = Some(m);
-                                    if use_early_stop && matches!(status, Status::Success(_)) {
+                        Ok(report) => {
+                            let candidate_model;
+                            (message, status, candidate_model) = report.evaluate();
+                            match status {
+                                Status::Success(Success::Satisfiable) => {
+                                    model = candidate_model;
+                                    if use_early_stop {
                                         early_stop.store(true, Ordering::Relaxed); // CMB finished early
                                     }
                                 }
-                                None => {
-                                    message.push_str("missing model");
+                                Status::Failure(Failure::Unknown) => {
+                                    match candidate_model {
+                                        Some(candidate) => {
+                                            let rem_problem = remodel_problem
+                                                .add_defined_functions(candidate.assignments);
+                                            match cvc5.build(rem_problem) {
+                                                Ok(rem_report) => {
+                                                    let (rem_message, rem_status, rem_model) =
+                                                        rem_report.evaluate();
+                                                    if matches!(
+                                                        rem_status,
+                                                        Status::Success(Success::Satisfiable)
+                                                    ) {
+                                                        model = rem_model;
+                                                        message.push_str(&rem_message);
+                                                        if use_early_stop {
+                                                            early_stop
+                                                                .store(true, Ordering::Relaxed); // CMB finished early
+                                                        }
+                                                    } else {
+                                                        message.push_str(&rem_message);
+                                                    }
+                                                }
+                                                Err(_) => todo!(),
+                                            }
+                                        }
+                                        None => {
+                                            message.push_str("missing model");
+                                        }
+                                    }
                                 }
-                            },
-                            Err(err) => {
-                                message.push_str(&err.to_string());
+                                Status::Failure(Failure::Unsatisfiable) => todo!(),
                             }
-                        },
+                        }
+
                         Err(err) => {
                             message.push_str(&err.to_string());
                         }
