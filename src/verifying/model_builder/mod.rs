@@ -59,6 +59,7 @@ pub enum Success {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Failure {
     Unsatisfiable,
+    Timeout,
     Unknown,
 }
 
@@ -77,6 +78,7 @@ impl Display for Status {
                 Status::Success(Success::Satisfiable) => "Satisfiable",
                 Status::Failure(Failure::Unsatisfiable) => "Unsatisfiable",
                 Status::Failure(Failure::Unknown) => "Unknown",
+                Status::Failure(Failure::Timeout) => "Timeout",
             }
         )
     }
@@ -94,6 +96,7 @@ impl FromStr for Status {
                     "sat" => Ok(Self::Success(Success::Satisfiable)),
                     "unsat" => Ok(Self::Failure(Failure::Unsatisfiable)),
                     "unknown" => Ok(Self::Failure(Failure::Unknown)),
+                    "cvc5 interrupted by timeout." => Ok(Self::Failure(Failure::Timeout)),
                     x => Err(StatusExtractionError::Unknown(x.to_string())),
                 }
             }
@@ -114,9 +117,9 @@ impl Display for Assignment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "(define-fun {} (", self.symbol)?;
         for arg in self.arguments.iter() {
-            write!(f, " ({arg})")?
+            write!(f, " {arg}")?
         }
-        write!(f, " ) {} ({}))\n", self.value_sort, self.definition)
+        write!(f, " ) {} {})\n", self.value_sort, self.definition)
     }
 }
 
@@ -199,20 +202,23 @@ impl ModelBuildingBackend {
                                         early_stop.store(true, Ordering::Relaxed); // CMB finished early
                                     }
                                 }
+
                                 Status::Failure(Failure::Unknown) => {
                                     match candidate_model {
                                         Some(candidate) => {
                                             let rem_problem = remodel_problem
-                                                .add_defined_functions(candidate.assignments);
+                                                .add_defined_functions(
+                                                    candidate.assignments.clone(),
+                                                );
                                             match cvc5.build(rem_problem) {
                                                 Ok(rem_report) => {
-                                                    let (rem_message, rem_status, rem_model) =
+                                                    let (rem_message, rem_status, _) =
                                                         rem_report.evaluate();
                                                     if matches!(
                                                         rem_status,
                                                         Status::Success(Success::Satisfiable)
                                                     ) {
-                                                        model = rem_model;
+                                                        model = Some(candidate);
                                                         message.push_str(&rem_message);
                                                         if use_early_stop {
                                                             early_stop
@@ -230,7 +236,10 @@ impl ModelBuildingBackend {
                                         }
                                     }
                                 }
+
                                 Status::Failure(Failure::Unsatisfiable) => todo!(),
+
+                                Status::Failure(Failure::Timeout) => todo!(),
                             }
                         }
 

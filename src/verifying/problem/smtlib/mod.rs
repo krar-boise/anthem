@@ -14,7 +14,7 @@ use {
 
 lazy_static! {
     static ref FN: Regex = Regex::new(
-        r"\(define-fun (?<symbol>[[:word:]]+) \((?<args>.*))\) (?<val>[Int|Bool]) (?<def>.*)\)"
+        r"\(define-fun (?<symbol>[[:word:]]+) \((?<args>.*)\) (?<val>Int|Bool) (?<def>.*)\)"
     )
     .unwrap();
 }
@@ -83,15 +83,22 @@ impl fmt::Display for AnnotatedFormula {
 
 impl Assignment {
     pub fn from_cvc_str(raw: &str) -> Assignment {
-        let caps = FN.captures(&raw).unwrap();
-        let arg_string = caps["args"].to_string();
-        let arguments = arg_string.split(" ").map(|s| s.to_string()).collect();
+        match FN.captures(&raw) {
+            Some(caps) => {
+                let arg_string = caps["args"].to_string();
+                let arguments: Vec<String> =
+                    arg_string.split(") ").map(|s| s.to_string()).collect();
 
-        Assignment {
-            symbol: caps["symbol"].to_string(),
-            arguments,
-            value_sort: caps["val"].to_string(),
-            definition: caps["def"].to_string(),
+                Assignment {
+                    symbol: caps["symbol"].to_string(),
+                    arguments,
+                    value_sort: caps["val"].to_string(),
+                    definition: caps["def"].to_string(),
+                }
+            }
+            None => {
+                panic!("pattern not found: {}", raw);
+            }
         }
     }
 }
@@ -246,7 +253,7 @@ impl fmt::Display for Problem {
 
         // Declare predicates
         for predicate in self.predicates().iter() {
-            if !defined_fn_symbols.contains(&predicate.symbol) {
+            if !defined_fn_symbols.contains(&format!("{}_{}", predicate.symbol, predicate.arity)) {
                 writeln!(f, "(declare-fun {} Bool)", smtlib::Format(predicate))?;
             }
         }

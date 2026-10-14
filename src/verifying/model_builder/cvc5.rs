@@ -29,6 +29,7 @@ pub enum Cvc5Error {
 #[derive(Debug, Clone)]
 pub struct Cvc5Output {
     pub stdout: String,
+    pub stderr: String,
 }
 
 impl TryFrom<Output> for Cvc5Output {
@@ -37,6 +38,7 @@ impl TryFrom<Output> for Cvc5Output {
     fn try_from(value: Output) -> Result<Self, Self::Error> {
         Ok(Cvc5Output {
             stdout: String::from_utf8(value.stdout).map_err(Cvc5Error::ConvertOutput)?,
+            stderr: String::from_utf8(value.stderr).map_err(Cvc5Error::ConvertOutput)?,
         })
     }
 }
@@ -55,15 +57,21 @@ fn assignments(output: &str) -> Vec<Assignment> {
     lines.next(); // Discard sat/unsat message
     lines.next(); // Discard the first '('
     for line in lines {
-        assignments.push(Assignment::from_cvc_str(line));
+        if !line.starts_with(")") {
+            // Discard the last ')'
+            assignments.push(Assignment::from_cvc_str(line));
+        }
     }
-    assignments.pop(); // Discard the last ')'
     assignments
 }
 
 impl Report for Cvc5Report {
     fn status(&self) -> Result<Status, StatusExtractionError> {
-        self.output.stdout.parse()
+        let stdout_result: Result<Status, StatusExtractionError> = self.output.stdout.parse();
+        match stdout_result {
+            Ok(status) => Ok(status),
+            Err(_) => self.output.stderr.parse(),
+        }
     }
 
     fn model(&self) -> Result<Option<Model>, ModelExtractionError> {
@@ -80,6 +88,7 @@ impl Report for Cvc5Report {
                     Ok(Some(Model { assignments }))
                 }
                 Status::Failure(Failure::Unsatisfiable) => Ok(None),
+                Status::Failure(Failure::Timeout) => Ok(None),
             },
             Err(error) => Err(ModelExtractionError::FailedStatusExtraction(error)),
         }
@@ -104,7 +113,12 @@ impl Report for Cvc5Report {
                             }
                         },
 
-                        Err(_) => todo!(),
+                        Err(err) => {
+                            message.push_str(&format!(
+                                "the model could not be returned due to error: {}",
+                                err
+                            ));
+                        }
                     }
                 }
 
@@ -113,27 +127,36 @@ impl Report for Cvc5Report {
                     match self.model() {
                         Ok(result) => match result {
                             Some(candidate) => {
-                                // convert to defined-funs, then re-run sat check
-                                // let func = Assignment::from_cvc_str(raw);
-                                // problem.add_defined_function();
                                 message.push_str(&status.to_string());
+                                message.push_str(" --- testing candidate model...\n\t");
                                 model = Some(candidate);
                             }
                             None => {
                                 message.push_str("missing candidate model");
                             }
                         },
-                        Err(_) => todo!(),
+                        Err(err) => {
+                            message.push_str(&format!(
+                                "the candidate model could not be returned due to error: {}",
+                                err
+                            ));
+                        }
                     }
                 }
 
-                Status::Failure(Failure::Unsatisfiable) => {
+                Status::Failure(Failure::Unsatisfiable) | Status::Failure(Failure::Timeout) => {
                     final_status = status;
                     message.push_str(&status.to_string());
                 }
             },
 
-            Err(_) => todo!(),
+            Err(err) => {
+                final_status = Status::Failure(Failure::Unknown);
+                message.push_str(&format!(
+                    "the status could not be reported due to error: {}",
+                    err
+                ));
+            }
         }
         (message, final_status, model)
     }
@@ -178,6 +201,10 @@ impl ModelBuilder for Cvc5 {
     fn build(&self, problem: Problem) -> Result<Self::Report, Self::Error> {
         //let start_time = Instant::now();
 
+        // println!("\n--- Problem --- \n");
+        // println!("{problem}");
+        // println!("\n--- No Problem --- \n");
+
         let time_limit = self.time_limit.to_string();
 
         let arguments = Vec::from_iter(["--dump-models", "--tlimit", &time_limit]);
@@ -194,10 +221,13 @@ impl ModelBuilder for Cvc5 {
         write!(stdin, "{problem}").map_err(Cvc5Error::Write)?;
         drop(stdin);
 
-        let output = child
+        let output: Cvc5Output = child
             .wait_with_output()
             .map_err(Cvc5Error::Wait)?
             .try_into()?;
+
+        println!("\n\nstdout:{}\n\n", output.stdout);
+        println!("\n\nstderr:{}\n\n", output.stderr);
 
         Ok(Cvc5Report {
             problem,
